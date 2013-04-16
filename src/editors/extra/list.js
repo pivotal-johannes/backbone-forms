@@ -2,7 +2,7 @@
 
   /**
    * List editor
-   * 
+   *
    * An array editor. Creates a list of other editor items.
    *
    * Special options:
@@ -10,8 +10,10 @@
    * @param {String} [options.schema.confirmDelete]     Text to display in a delete confirmation dialog. If falsey, will not ask for confirmation.
    */
   Form.editors.List = Form.editors.Base.extend({
+    hasNestedForm: true,
 
-    events: {
+
+        events: {
       'click [data-action="add"]': function(event) {
         event.preventDefault();
         this.addItem(null, true);
@@ -72,9 +74,9 @@
       this.setElement($el);
       this.$el.attr('id', this.id);
       this.$el.attr('name', this.key);
-            
+
       if (this.hasFocus) this.trigger('blur', this);
-      
+
       return this;
     },
 
@@ -96,11 +98,11 @@
         Editor: this.Editor,
         key: this.key
       }).render();
-      
+
       var _addItem = function() {
         self.items.push(item);
         self.$list.append(item.el);
-        
+
         item.editor.on('all', function(event) {
           if (event === 'change') return;
 
@@ -134,11 +136,11 @@
             self.trigger('blur', self);
           }, 0);
         }, self);
-        
+
         if (userInitiated || value) {
           item.addEventTriggered = true;
         }
-        
+
         if (userInitiated) {
           self.trigger('add', self, item.editor);
           self.trigger('change', self);
@@ -155,7 +157,7 @@
         _addItem();
         item.editor.focus();
       }
-      
+
       return item;
     },
 
@@ -164,6 +166,10 @@
      * @param {List.Item} item
      */
     removeItem: function(item) {
+      if(this.items.length <= this.schema.minItems){
+        return;
+      }
+
       //Confirm delete
       var confirmMsg = this.schema.confirmDelete;
       if (confirmMsg && !confirm(confirmMsg)) return;
@@ -172,7 +178,7 @@
 
       this.items[index].remove();
       this.items.splice(index, 1);
-      
+
       if (item.addEventTriggered) {
         this.trigger('remove', this, item.editor);
         this.trigger('change', this);
@@ -194,18 +200,18 @@
       this.value = value;
       this.render();
     },
-    
+
     focus: function() {
       if (this.hasFocus) return;
 
       if (this.items[0]) this.items[0].editor.focus();
     },
-    
+
     blur: function() {
       if (!this.hasFocus) return;
 
       var focusedItem = _.find(this.items, function(item) { return item.editor.hasFocus; });
-      
+
       if (focusedItem) focusedItem.editor.blur();
     },
 
@@ -217,15 +223,13 @@
 
       Form.editors.Base.prototype.remove.call(this);
     },
-    
+
     /**
      * Run validation
-     * 
+     *
      * @return {Object|Null}
      */
     validate: function() {
-      if (!this.validators) return null;
-
       //Collect errors
       var errors = _.map(this.items, function(item) {
         return item.validate();
@@ -310,7 +314,7 @@
 
       //Replace the entire element so there isn't a wrapper tag
       this.setElement($el);
-        
+
       return this;
     },
 
@@ -321,11 +325,11 @@
     setValue: function(value) {
       this.editor.setValue(value);
     },
-    
+
     focus: function() {
       this.editor.focus();
     },
-    
+
     blur: function() {
       this.editor.blur();
     },
@@ -340,25 +344,25 @@
       var value = this.getValue(),
           formValues = this.list.form ? this.list.form.getValue() : {},
           validators = this.schema.validators,
-          getValidator = this.getValidator;
+          getValidator = this.getValidator,
+          error = null,
+          innerErrors;
 
-      if (!validators) return null;
-
-      //Run through validators until an error is found
-      var error = null;
-      _.every(validators, function(validator) {
-        error = getValidator(validator)(value, formValues);
-
-        return error ? false : true;
-      });
-
-      //Show/hide error
-      if (error){
-        this.setError(error);
-      } else {
-        this.clearError();
+      if(this.editor.form){
+        innerErrors = this.editor.form.commit();
       }
 
+      //Run through validators until an error is found
+      _.every(validators, function(validator) {
+          error = getValidator(validator)(value, formValues);
+
+          return continueLoop = error ? false : true;
+      });
+
+      //Show/hide outer error
+      error ? this.setError(error, innerErrors) : this.clearError();
+
+      error = error || innerErrors;
       //Return error to be aggregated by list
       return error ? error : null;
     },
@@ -366,9 +370,11 @@
     /**
      * Show a validation error
      */
-    setError: function(err) {
-      this.$el.addClass(this.errorClassName);
-      this.$el.attr('title', err.message);
+    setError: function(err, innerErrors) {
+      if (typeof(innerErrors) === undefined || innerErrors === undefined) {
+        this.$el.addClass(this.errorClassName);
+        this.$el.attr('title', err.message);
+      }
     },
 
     /**
@@ -394,7 +400,7 @@
 
 
   /**
-   * Base modal object editor for use with the List editor; used by Object 
+   * Base modal object editor for use with the List editor; used by Object
    * and NestedModal list types
    */
   Form.editors.List.Modal = Form.editors.Base.extend({
@@ -413,9 +419,9 @@
      */
     initialize: function(options) {
       options = options || {};
-      
+
       Form.editors.Base.prototype.initialize.call(this, options);
-      
+
       //Dependencies
       if (!Form.editors.List.Modal.ModalAdapter) throw 'A ModalAdapter is required';
 
@@ -464,7 +470,7 @@
      * Function which returns a generic string representation of an object
      *
      * @param {Object} value
-     * 
+     *
      * @return {String}
      */
     itemToString: function(value) {
@@ -501,7 +507,7 @@
 
       //If there's a specified toString use that
       if (schema.itemToString) return schema.itemToString(value);
-      
+
       //Otherwise use the generic method or custom overridden method
       return this.itemToString(value);
     },
@@ -526,7 +532,7 @@
       this.trigger('focus', this);
 
       modal.on('cancel', this.onModalClosed, this);
-      
+
       modal.on('ok', _.bind(this.onModalSubmitted, this));
     },
 
@@ -550,7 +556,7 @@
       this.renderSummary();
 
       if (isNew) this.trigger('readyToAdd');
-      
+
       this.trigger('change', this);
 
       this.onModalClosed();
@@ -574,16 +580,16 @@
     setValue: function(value) {
       this.value = value;
     },
-    
+
     focus: function() {
       if (this.hasFocus) return;
 
       this.openEditor();
     },
-    
+
     blur: function() {
       if (!this.hasFocus) return;
-      
+
       if (this.modal) {
         this.modal.trigger('cancel');
       }
@@ -598,7 +604,7 @@
     //Defaults to BootstrapModal (http://github.com/powmedia/backbone.bootstrap-modal)
     //Can be replaced with another adapter that implements the same interface.
     ModalAdapter: Backbone.BootstrapModal,
-    
+
     //Make the wait list for the 'ready' event before adding the item to the list
     isAsync: true
   });
@@ -641,7 +647,7 @@
 
       //If there's a specified toString use that
       if (schema.itemToString) return schema.itemToString(value);
-      
+
       //Otherwise use the model
       return new (schema.model)(value).toString();
     }
